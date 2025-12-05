@@ -1,0 +1,35 @@
+name: CD - Deploy to Azure ACI
+
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v3
+
+      - name: Azure Login
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Deploy to Azure Container Instance
+        uses: azure/aci-deploy@v1
+        with:
+          resource-group: ${{ secrets.AZURE_RESOURCE_GROUP }}
+          name: cloudmart-ssgarana
+          image: ${{ secrets.DOCKER_IMAGE }}:latest
+          cpu: 1
+          memory: 1.5
+          registry-login-server: index.docker.io
+          registry-username: ${{ secrets.DOCKER_USERNAME }}
+          registry-password: ${{ secrets.DOCKER_TOKEN }}
+          location: canadacentral
+          dns-name-label: cloudmart-ssgarana
+          ports: 80
+          environment-variables: |
+            COSMOS_ENDPOINT=${{ secrets.COSMOS_ENDPOINT }}
+            COSMOS_KEY=${{ secrets.COSMOS_KEY }}
