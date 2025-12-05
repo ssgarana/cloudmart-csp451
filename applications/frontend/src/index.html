@@ -2,58 +2,206 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>CloudMart</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CloudMart Storefront</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
-    body { font-family: Arial, sans-serif; margin: 1.5rem; }
-    header { margin-bottom: 1rem; }
-    .products { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 1rem; }
-    .card { border: 1px solid #ddd; border-radius: 6px; padding: 1rem; }
-    .badge { background: #0078d4; color: white; padding: 2px 6px; border-radius: 4px; font-size: 0.75rem; }
-    button { margin-top: 0.5rem; padding: 4px 8px; }
+    body { font-family: Arial, sans-serif; margin: 0; padding: 0; background:#fafafa; }
+    header { padding: 1rem 2rem; background: #111; color: #fff; display:flex; justify-content:space-between; align-items:center; }
+    header h1 { margin:0; }
+    main { padding: 1.5rem 2rem; }
+
+    .cart-btn { background:#ff0066; color:white; padding:10px 20px; border:none; border-radius:6px; cursor:pointer; }
+
+    .toolbar { display:flex; gap:1rem; margin:1rem 0; }
+
+    .products { display:grid; grid-template-columns: repeat(auto-fit,minmax(220px,1fr)); gap:1rem; }
+
+    .card { background:white; padding:1rem; border-radius:10px; border:1px solid #ddd; box-shadow:0 1px 4px rgba(0,0,0,0.1); }
+    .badge { background:#007bff; color:white; padding:3px 7px; border-radius:4px; font-size:12px; }
+
+    button { cursor:pointer; }
+
+    .hidden { display:none; }
+
+    table { width:100%; border-collapse:collapse; margin-top:1rem; }
+    th,td { border:1px solid #ccc; padding:8px; }
+    tfoot td { font-weight:bold; }
+
+    .back-btn { cursor:pointer; color:#007bff; text-decoration:underline; }
   </style>
 </head>
+
 <body>
+
 <header>
   <h1>CloudMart Storefront</h1>
-  <p>Simple e-commerce demo deployed to Azure Container Instances with Cosmos DB.</p>
+  <button id="cartBtn" class="cart-btn">Cart (<span id="cartCount">0</span>)</button>
 </header>
 
-<section>
-  <h2>Products</h2>
-  <div id="products" class="products"></div>
-</section>
+<main>
+
+  <!-- PRODUCTS PAGE -->
+  <section id="productsPage">
+    <h2>Products</h2>
+
+    <div class="toolbar">
+      <label><strong>Category:</strong></label>
+      <select id="categoryFilter">
+        <option value="all">All</option>
+      </select>
+    </div>
+
+    <div id="products" class="products"></div>
+  </section>
+
+  <!-- CART PAGE -->
+  <section id="cartPage" class="hidden">
+    <h2>Your Cart</h2>
+    <span class="back-btn" id="backBtn">← Back</span>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Product</th>
+          <th>Qty</th>
+          <th>Price</th>
+          <th>Subtotal</th>
+        </tr>
+      </thead>
+      <tbody id="cartTable"></tbody>
+      <tfoot>
+        <tr>
+          <td colspan="3">Total</td>
+          <td id="cartTotal">$0.00</td>
+        </tr>
+      </tfoot>
+    </table>
+
+    <button id="checkoutBtn" class="cart-btn">Checkout</button>
+  </section>
+
+  <!-- ORDER SUCCESS PAGE -->
+  <section id="successPage" class="hidden">
+    <h2>Order Successful!</h2>
+    <p>Your order has been placed successfully.</p>
+    <button id="returnHome" class="cart-btn">Return Home</button>
+  </section>
+
+</main>
 
 <script>
+const API = "/api/v1";
+let cart = [];
+
 async function loadProducts() {
-  const res = await fetch('/api/v1/products');
-  const data = await res.json();
-  const container = document.getElementById('products');
-  container.innerHTML = '';
-  data.forEach(p => {
-    const div = document.createElement('div');
-    div.className = 'card';
-    div.innerHTML = `
-      <h3>${p.name}</h3>
-      <span class="badge">${p.category}</span>
-      <p>${p.description || ''}</p>
-      <p><strong>$${p.price}</strong></p>
-      <button onclick="addToCart('${p.id}', '${p.name}')">Add to Cart</button>
-    `;
-    container.appendChild(div);
+  const res = await fetch(`${API}/products`);
+  const products = await res.json();
+
+  const container = document.getElementById("products");
+  container.innerHTML = "";
+
+  const categorySelect = document.getElementById("categoryFilter");
+  const categories = ["all", ...new Set(products.map(p => p.category))];
+
+  categorySelect.innerHTML = categories.map(c => `<option value="${c}">${c}</option>`).join("");
+
+  displayProducts(products);
+}
+
+function displayProducts(list) {
+  const container = document.getElementById("products");
+  container.innerHTML = "";
+
+  list.forEach(p => {
+    container.innerHTML += `
+      <div class="card">
+        <h3>${p.name}</h3>
+        <span class="badge">${p.category}</span>
+        <p>${p.description}</p>
+        <p><strong>$${p.price}</strong></p>
+        <button onclick="addToCart('${p.id}', '${p.name}', ${p.price})">Add to Cart</button>
+      </div>`;
   });
 }
 
-async function addToCart(id, name) {
-  await fetch('/api/v1/cart/items', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ id, name })
-  });
+function addToCart(id, name, price) {
+  cart.push({ id, name, price, qty: 1 });
+  updateCartUI();
   alert(`${name} added to cart`);
 }
 
+function updateCartUI() {
+  document.getElementById("cartCount").innerText = cart.length;
+}
+
+function showCart() {
+  document.getElementById("productsPage").classList.add("hidden");
+  document.getElementById("cartPage").classList.remove("hidden");
+
+  const tbody = document.getElementById("cartTable");
+  tbody.innerHTML = "";
+
+  let total = 0;
+
+  cart.forEach(item => {
+    const subtotal = item.price * item.qty;
+    total += subtotal;
+
+    tbody.innerHTML += `
+      <tr>
+        <td>${item.name}</td>
+        <td>${item.qty}</td>
+        <td>$${item.price}</td>
+        <td>$${subtotal.toFixed(2)}</td>
+      </tr>`;
+  });
+
+  document.getElementById("cartTotal").innerText = `$${total.toFixed(2)}`;
+}
+
+async function checkout() {
+  const res = await fetch(`${API}/orders`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ items: cart })
+  });
+
+  if (res.ok) {
+    updateCartUI();
+    document.getElementById("cartPage").classList.add("hidden");
+    document.getElementById("successPage").classList.remove("hidden");
+  } else {
+
+document.getElementById("cartBtn").onclick = showCart;
+document.getElementById("backBtn").onclick = () => {
+  document.getElementById("cartPage").classList.add("hidden");
+  document.getElementById("productsPage").classList.remove("hidden");
+};
+
+document.getElementById("checkoutBtn").onclick = checkout;
+document.getElementById("returnHome").onclick = () => {
+  document.getElementById("successPage").classList.add("hidden");
+  document.getElementById("productsPage").classList.remove("hidden");
+};
+
+document.getElementById("categoryFilter").addEventListener("change", async (e) => {
+  const selected = e.target.value;
+  const res = await fetch(`${API}/products`);
+  const all = await res.json();
+
+  if (selected === "all") {
+    displayProducts(all);
+  } else {
+    displayProducts(all.filter(p => p.category === selected));
+  }
+});
+
 loadProducts();
 </script>
+
 </body>
 </html>
+    alert("Checkout failed!");
+  }
+}
+
